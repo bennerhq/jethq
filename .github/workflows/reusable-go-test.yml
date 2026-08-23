@@ -19,6 +19,8 @@ jobs:
   test:
     name: Test
     runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout

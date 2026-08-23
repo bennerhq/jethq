@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     name: Test (${{ matrix.os }})
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -24,6 +26,8 @@ jobs:
     name: Build (${{ matrix.name }})
     needs: test
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:

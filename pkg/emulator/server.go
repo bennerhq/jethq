@@ -428,12 +428,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "authToken",
-		Value:    s.token,
-		Path:     "/",
-		HttpOnly: true,
-	})
+	http.SetCookie(w, s.authCookie(s.token, 0))
 	_ = json.NewEncoder(w).Encode(map[string]string{"message": "Login successful"})
 }
 
@@ -596,7 +591,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		}
 		s.cfg.AuthMode = AuthModePassword
 		s.cfg.Password = req.Password
-		http.SetCookie(w, &http.Cookie{Name: "authToken", Value: s.token, Path: "/", HttpOnly: true})
+		http.SetCookie(w, s.authCookie(s.token, 0))
 	default:
 		http.Error(w, "Invalid localAuthMode", http.StatusBadRequest)
 		return
@@ -612,7 +607,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "authToken", Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
+	http.SetCookie(w, s.authCookie("", -1))
 	_ = json.NewEncoder(w).Encode(map[string]string{"message": "Logout successful"})
 }
 
@@ -635,7 +630,7 @@ func (s *Server) handlePasswordLocal(w http.ResponseWriter, r *http.Request) {
 		}
 		s.cfg.AuthMode = AuthModePassword
 		s.cfg.Password = req.Password
-		http.SetCookie(w, &http.Cookie{Name: "authToken", Value: s.token, Path: "/", HttpOnly: true})
+		http.SetCookie(w, s.authCookie(s.token, 0))
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Password set successfully"})
 	case http.MethodPut:
@@ -656,7 +651,7 @@ func (s *Server) handlePasswordLocal(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.cfg.Password = req.NewPassword
-		http.SetCookie(w, &http.Cookie{Name: "authToken", Value: s.token, Path: "/", HttpOnly: true})
+		http.SetCookie(w, s.authCookie(s.token, 0))
 		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Password updated successfully"})
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -688,7 +683,7 @@ func (s *Server) handleDeletePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfg.Password = ""
 	s.cfg.AuthMode = AuthModeNoPassword
-	http.SetCookie(w, &http.Cookie{Name: "authToken", Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
+	http.SetCookie(w, s.authCookie("", -1))
 	_ = json.NewEncoder(w).Encode(map[string]string{"message": "Password disabled successfully"})
 }
 
@@ -751,6 +746,22 @@ func (s *Server) handleStorageUpload(w http.ResponseWriter, r *http.Request) {
 		s.storage[incompleteName] = file
 	}
 	_ = json.NewEncoder(w).Encode(map[string]string{"message": "Upload completed"})
+}
+
+func (s *Server) tlsEnabled() bool {
+	return s.state.TLSMode != "" && s.state.TLSMode != "disabled"
+}
+
+func (s *Server) authCookie(value string, maxAge int) *http.Cookie {
+	return &http.Cookie{
+		Name:     "authToken",
+		Value:    value,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   s.tlsEnabled(),
+		MaxAge:   maxAge,
+	}
 }
 
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) bool {
