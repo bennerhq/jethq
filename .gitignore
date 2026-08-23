@@ -1,3 +1,18 @@
 research/
 .cache/
 /jetkvm-desktop
+
+# Go binaries, plugins, and test artifacts.
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+go.work
+go.work.sum
+.env
