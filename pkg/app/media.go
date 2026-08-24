@@ -12,9 +12,9 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/sqweek/dialog"
 
-	"github.com/lkarlslund/jetkvm-desktop/pkg/session"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/ui"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/virtualmedia"
+	"github.com/bennerhq/jethq/pkg/session"
+	"github.com/bennerhq/jethq/pkg/ui"
+	"github.com/bennerhq/jethq/pkg/virtualmedia"
 )
 
 func (a *App) openMediaOverlay() {

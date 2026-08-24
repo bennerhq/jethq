@@ -18,15 +18,15 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/pion/webrtc/v4"
 
-	"github.com/lkarlslund/jetkvm-desktop/pkg/client"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/discovery"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/hotkeys"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/input"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/logging"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/nativeui"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/session"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/ui"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/virtualmedia"
+	"github.com/bennerhq/jethq/pkg/client"
+	"github.com/bennerhq/jethq/pkg/discovery"
+	"github.com/bennerhq/jethq/pkg/hotkeys"
+	"github.com/bennerhq/jethq/pkg/input"
+	"github.com/bennerhq/jethq/pkg/logging"
+	"github.com/bennerhq/jethq/pkg/nativeui"
+	"github.com/bennerhq/jethq/pkg/session"
+	"github.com/bennerhq/jethq/pkg/ui"
+	"github.com/bennerhq/jethq/pkg/virtualmedia"
 )
 
 type Config struct {
@@ -64,6 +64,7 @@ type App struct {
 	lastUIX                int
 	lastUIY                int
 	uiVisibleUntil         time.Time
+	uiRevealStarted        time.Time
 	settingsOpen           bool
 	pasteOpen              bool
 	statsOpen              bool
@@ -421,6 +422,7 @@ func New(cfg Config) (*App, error) {
 		lastPhase:           session.PhaseIdle,
 		focused:             true,
 		uiVisibleUntil:      time.Now().Add(3 * time.Second),
+		uiRevealStarted:     time.Now(),
 		settingsSection:     sectionGeneral,
 		prefs:               prefs,
 		hideCursor:          prefs.HideCursor,

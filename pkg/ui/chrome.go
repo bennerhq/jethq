@@ -1,6 +1,10 @@
 package ui
 
-import "image/color"
+import (
+	"image/color"
+
+	"github.com/hajimehoshi/ebiten/v2"
+)
 
 type IconKind uint8
 
@@ -24,6 +28,8 @@ type IconButton struct {
 	Active  bool
 	Enabled bool
 	Alpha   float64
+	Dock    bool
+	Hovered bool
 }
 
 func (b IconButton) Measure(_ *Context, constraints Constraints) Size {
@@ -44,8 +50,24 @@ func (b IconButton) Draw(ctx *Context, bounds Rect) {
 		stroke = withAlpha(ctx.Theme.ButtonStroke, b.Alpha*0.75)
 		icon = withAlpha(ctx.Theme.DisabledText, b.Alpha)
 	}
-	ctx.FillRect(bounds, fill)
-	ctx.StrokeRect(bounds, 1, stroke)
+	if b.Hovered && b.Enabled {
+		fill = withAlpha(ctx.Theme.ActiveFill, b.Alpha*0.9)
+		stroke = withAlpha(ctx.Theme.ActiveStroke, b.Alpha)
+		icon = rgba(244, 248, 252, 255, b.Alpha)
+	}
+	if b.Dock && b.Enabled {
+		icon = withAlpha(ctx.Theme.Title, b.Alpha)
+	}
+	if b.Dock {
+		// The surrounding chrome strip supplies the shared glass-like surface.
+		// Only selected controls get their own rounded highlight.
+		if b.Active || b.Hovered {
+			ctx.FillStrokedRoundedRect(bounds.Inset(UniformInsets(3)), 1, 7, stroke, fill)
+		}
+	} else {
+		ctx.FillRect(bounds, fill)
+		ctx.StrokeRect(bounds, 1, stroke)
+	}
 	drawIcon(ctx, b.Kind, bounds, icon, b.Active)
 }
 
@@ -67,19 +89,32 @@ func (t Tooltip) Draw(ctx *Context, bounds Rect) {
 func drawIcon(ctx *Context, kind IconKind, r Rect, clr color.Color, active bool) {
 	cx := r.X + r.W/2
 	cy := r.Y + r.H/2
-	left := r.X + 9
-	right := r.X + r.W - 9
-	top := r.Y + 9
-	bottom := r.Y + r.H - 9
+	// Keep the control hit area generous, but use a restrained 26px glyph
+	// canvas so the symbols read like a compact native toolbar rather than
+	// oversized illustrations.
+	left := r.X + 12
+	right := r.X + r.W - 12
+	top := r.Y + 12
+	bottom := r.Y + r.H - 12
+	if phosphor := phosphorIcon(kind); phosphor != nil {
+		glyphSize := right - left
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Scale(glyphSize/phosphorRasterSize, glyphSize/phosphorRasterSize)
+		op.GeoM.Translate(left, top)
+		op.ColorScale.ScaleWithColor(clr)
+		ctx.Screen.DrawImage(phosphor, op)
+		return
+	}
 	mid := r.Y + r.H/2
 	switch kind {
 	case IconReconnect:
-		ctx.StrokeLine(Point{left + 3, top + 1}, Point{right - 2, top + 1}, 1.5, clr)
-		ctx.StrokeLine(Point{right - 2, top + 1}, Point{right - 2, bottom - 4}, 1.5, clr)
-		ctx.StrokeLine(Point{right - 2, bottom - 4}, Point{left + 5, bottom - 4}, 1.5, clr)
-		ctx.StrokeLine(Point{left + 5, bottom - 4}, Point{left + 5, mid + 1}, 1.5, clr)
-		ctx.StrokeLine(Point{left + 5, mid + 1}, Point{left + 1, mid - 3}, 1.5, clr)
-		ctx.StrokeLine(Point{left + 5, mid + 1}, Point{left + 9, mid - 3}, 1.5, clr)
+		// Refresh-cw: a lighter, more familiar reconnect mark.
+		ctx.StrokeLine(Point{left + 4, top + 5}, Point{right - 3, top + 5}, 1.4, clr)
+		ctx.StrokeLine(Point{right - 3, top + 5}, Point{right - 7, top + 1}, 1.4, clr)
+		ctx.StrokeLine(Point{right - 3, top + 5}, Point{right - 7, top + 9}, 1.4, clr)
+		ctx.StrokeLine(Point{right - 4, bottom - 5}, Point{left + 3, bottom - 5}, 1.4, clr)
+		ctx.StrokeLine(Point{left + 3, bottom - 5}, Point{left + 7, bottom - 9}, 1.4, clr)
+		ctx.StrokeLine(Point{left + 3, bottom - 5}, Point{left + 7, bottom - 1}, 1.4, clr)
 	case IconMouse:
 		if active {
 			ctx.StrokeLine(Point{cx, top}, Point{cx, bottom}, 1.5, clr)
@@ -94,18 +129,19 @@ func drawIcon(ctx *Context, kind IconKind, r Rect, clr color.Color, active bool)
 			ctx.StrokeLine(Point{left + 2, top}, Point{cx + 1, bottom - 2}, 1.5, clr)
 		}
 	case IconPaste:
-		ctx.StrokeRect(Rect{X: left, Y: top + 2, W: right - left, H: bottom - top - 2}, 1.4, clr)
-		ctx.StrokeLine(Point{left + 3, top + 6}, Point{right - 3, top + 6}, 1.4, clr)
-		ctx.StrokeLine(Point{cx, top + 6}, Point{cx, top + 1}, 1.4, clr)
+		ctx.StrokeRect(Rect{X: left + 1, Y: top + 3, W: right - left - 2, H: bottom - top - 3}, 1.4, clr)
+		ctx.StrokeLine(Point{left + 4, top + 7}, Point{right - 4, top + 7}, 1.4, clr)
+		ctx.StrokeLine(Point{cx, top + 7}, Point{cx, top + 2}, 1.4, clr)
 	case IconMedia:
-		ctx.StrokeRect(Rect{X: left + 1, Y: top + 2, W: right - left - 2, H: bottom - top - 5}, 1.4, clr)
-		ctx.StrokeLine(Point{left + 5, top + 2}, Point{left + 8, top - 1}, 1.4, clr)
-		ctx.StrokeLine(Point{right - 5, top + 2}, Point{right - 8, top - 1}, 1.4, clr)
-		ctx.StrokeLine(Point{left + 4, cy}, Point{right - 4, cy}, 1.4, clr)
+		// Hard-drive, matching the virtual-media action rather than a generic box.
+		ctx.StrokeRect(Rect{X: left, Y: top + 4, W: right - left, H: bottom - top - 6}, 1.4, clr)
+		ctx.StrokeLine(Point{left + 2, cy + 3}, Point{right - 2, cy + 3}, 1.4, clr)
+		ctx.FillCircle(Point{X: left + 5, Y: bottom - 5}, 1.2, clr)
+		ctx.FillCircle(Point{X: left + 9, Y: bottom - 5}, 1.2, clr)
 	case IconStats:
-		ctx.StrokeLine(Point{left + 2, bottom}, Point{left + 2, mid + 4}, 2, clr)
-		ctx.StrokeLine(Point{cx, bottom}, Point{cx, top + 5}, 2, clr)
-		ctx.StrokeLine(Point{right - 2, bottom}, Point{right - 2, mid - 1}, 2, clr)
+		ctx.StrokeLine(Point{left + 3, bottom - 1}, Point{left + 3, mid + 4}, 1.8, clr)
+		ctx.StrokeLine(Point{cx, bottom - 1}, Point{cx, top + 5}, 1.8, clr)
+		ctx.StrokeLine(Point{right - 3, bottom - 1}, Point{right - 3, mid - 1}, 1.8, clr)
 	case IconTerminal:
 		ctx.StrokeRect(Rect{X: left, Y: top + 1, W: right - left, H: bottom - top - 2}, 1.4, clr)
 		ctx.StrokeLine(Point{left + 4, top + 6}, Point{left + 7, top + 9}, 1.4, clr)
@@ -124,12 +160,12 @@ func drawIcon(ctx *Context, kind IconKind, r Rect, clr color.Color, active bool)
 		ctx.StrokeLine(Point{right - 4, bottom - 1}, Point{right, mid}, 1.5, clr)
 		ctx.StrokeLine(Point{right, mid}, Point{right - 3, top + 4}, 1.5, clr)
 	case IconSettings:
-		ctx.StrokeLine(Point{left, top + 2}, Point{right, top + 2}, 1.5, clr)
-		ctx.StrokeLine(Point{left, cy}, Point{right, cy}, 1.5, clr)
-		ctx.StrokeLine(Point{left, bottom - 2}, Point{right, bottom - 2}, 1.5, clr)
-		ctx.FillRect(Rect{X: cx - 6.5, Y: top - 0.5, W: 5, H: 5}, clr)
-		ctx.FillRect(Rect{X: cx + 2.5, Y: cy - 2.5, W: 5, H: 5}, clr)
-		ctx.FillRect(Rect{X: cx - 3.5, Y: bottom - 4.5, W: 5, H: 5}, clr)
+		ctx.StrokeLine(Point{left, top + 3}, Point{right, top + 3}, 1.4, clr)
+		ctx.StrokeLine(Point{left, cy}, Point{right, cy}, 1.4, clr)
+		ctx.StrokeLine(Point{left, bottom - 3}, Point{right, bottom - 3}, 1.4, clr)
+		ctx.FillCircle(Point{X: cx - 4, Y: top + 3}, 2.2, clr)
+		ctx.FillCircle(Point{X: cx + 4, Y: cy}, 2.2, clr)
+		ctx.FillCircle(Point{X: cx - 1, Y: bottom - 3}, 2.2, clr)
 	case IconFullscreen:
 		ctx.StrokeLine(Point{left, top + 4}, Point{left, top}, 1.6, clr)
 		ctx.StrokeLine(Point{left, top}, Point{left + 4, top}, 1.6, clr)
@@ -161,6 +197,11 @@ func rgba(r, g, b, a uint8, alpha float64) color.Color {
 }
 
 func withAlpha(clr color.Color, alpha float64) color.Color {
+	return WithAlpha(clr, alpha)
+}
+
+// WithAlpha returns clr with its existing opacity scaled by alpha.
+func WithAlpha(clr color.Color, alpha float64) color.Color {
 	if alpha <= 0 {
 		return color.RGBA{}
 	}

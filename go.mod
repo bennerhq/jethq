@@ -1,4 +1,4 @@
-module github.com/lkarlslund/jetkvm-desktop
+module github.com/bennerhq/jethq
 
 go 1.26.2
 
@@ -11,6 +11,8 @@ require (
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.2
 	github.com/sqweek/dialog v0.0.0-20260123140253-64c163d53aac
+	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
+	github.com/srwiley/rasterx v0.0.0-20210519020934-456a8d69b780
 	golang.design/x/clipboard v0.7.0
 )
 

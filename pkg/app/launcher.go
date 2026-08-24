@@ -9,8 +9,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
-	"github.com/lkarlslund/jetkvm-desktop/pkg/discovery"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/ui"
+	"github.com/bennerhq/jethq/pkg/discovery"
+	"github.com/bennerhq/jethq/pkg/ui"
 )
 
 func (a *App) syncDiscovery() {

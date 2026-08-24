@@ -10,10 +10,10 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/lkarlslund/jetkvm-desktop/pkg/emulator"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/input"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/session"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/ui"
+	"github.com/bennerhq/jethq/pkg/emulator"
+	"github.com/bennerhq/jethq/pkg/input"
+	"github.com/bennerhq/jethq/pkg/session"
+	"github.com/bennerhq/jethq/pkg/ui"
 )
 
 func TestNormalizeBaseURL(t *testing.T) {

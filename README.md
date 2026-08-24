@@ -48,4 +48,4 @@ This is a separate desktop client for the JetKVM ecosystem. For the upstream Jet
 
 Prebuilt releases are published on GitHub Releases:
 
-`https://github.com/lkarlslund/jetkvm-desktop/releases`
+`https://github.com/bennerhq/jethq/releases`

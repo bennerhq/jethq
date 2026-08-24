@@ -13,10 +13,10 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/lkarlslund/jetkvm-desktop/images"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/app"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/logging"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/nativeui"
+	"github.com/bennerhq/jethq/images"
+	"github.com/bennerhq/jethq/pkg/app"
+	"github.com/bennerhq/jethq/pkg/logging"
+	"github.com/bennerhq/jethq/pkg/nativeui"
 )
 
 const defaultPasswordEnv = "JETKVM_PASSWORD"

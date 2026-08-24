@@ -17,13 +17,13 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 
-	"github.com/lkarlslund/jetkvm-desktop/pkg/client"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/logging"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/protocol/hidrpc"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/protocol/jsonrpc"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/protocol/signaling"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/video"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/virtualmedia"
+	"github.com/bennerhq/jethq/pkg/client"
+	"github.com/bennerhq/jethq/pkg/logging"
+	"github.com/bennerhq/jethq/pkg/protocol/hidrpc"
+	"github.com/bennerhq/jethq/pkg/protocol/jsonrpc"
+	"github.com/bennerhq/jethq/pkg/protocol/signaling"
+	"github.com/bennerhq/jethq/pkg/video"
+	"github.com/bennerhq/jethq/pkg/virtualmedia"
 )
 
 type AuthMode string

@@ -11,11 +11,11 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/lkarlslund/jetkvm-desktop/pkg/hotkeys"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/input"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/logging"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/session"
-	"github.com/lkarlslund/jetkvm-desktop/pkg/ui"
+	"github.com/bennerhq/jethq/pkg/hotkeys"
+	"github.com/bennerhq/jethq/pkg/input"
+	"github.com/bennerhq/jethq/pkg/logging"
+	"github.com/bennerhq/jethq/pkg/session"
+	"github.com/bennerhq/jethq/pkg/ui"
 )
 
 //go:generate go tool github.com/dmarkham/enumer -type=iconKind,settingsSection -linecomment -json -text -output chrome_enums.go
@@ -372,10 +372,30 @@ func (a *App) uiAlpha() float64 {
 }
 
 func (a *App) revealUIFor(d time.Duration) {
-	until := time.Now().Add(d)
+	now := time.Now()
+	if a.uiAlpha() < 1 {
+		a.uiRevealStarted = now
+	}
+	until := now.Add(d)
 	if until.After(a.uiVisibleUntil) {
 		a.uiVisibleUntil = until
 	}
+}
+
+func (a *App) chromeSlideProgress() float64 {
+	if a.prefs.PinChrome || a.settingsOpen {
+		return 1
+	}
+	const duration = 180 * time.Millisecond
+	now := time.Now()
+	remaining := time.Until(a.uiVisibleUntil)
+	if remaining <= 0 {
+		return 0
+	}
+	if remaining < duration {
+		return float64(remaining) / float64(duration)
+	}
+	return min(1, float64(now.Sub(a.uiRevealStarted))/float64(duration))
 }
 
 func (a *App) layoutChromeButtons(width, height int, snap session.Snapshot) []chromeButton {
@@ -437,8 +457,10 @@ func (a *App) layoutChromeButtons(width, height int, snap session.Snapshot) []ch
 		}},
 	)
 
-	const size = 34.0
-	const gap = 8.0
+	// A 50px control leaves a 32px icon canvas (the icon renderer uses 9px
+	// insets), doubling the previous 16px glyph size.
+	const size = 50.0
+	const gap = 12.0
 	totalW := size
 	totalH := size
 	horizontal := a.prefs.ChromeLayout != chromeLayoutVertical
@@ -551,11 +573,46 @@ func (a *App) drawTopBar(screen *ebiten.Image, snap session.Snapshot) {
 		return
 	}
 	buttons := a.layoutChromeButtons(screen.Bounds().Dx(), screen.Bounds().Dy(), snap)
+	buttons = slideChromeButtons(buttons, a.prefs.ChromeAnchor, float64(screen.Bounds().Dx()), float64(screen.Bounds().Dy()), a.chromeSlideProgress())
 	a.chromeButtons = buttons
 	a.drawUIRoot(screen, &a.chromeRuntime, func(chromeButton) {}, chromeButtonsElement{
 		buttons: buttons,
 		alpha:   alpha,
 	})
+}
+
+func slideChromeButtons(buttons []chromeButton, anchor ChromeAnchor, width, height, progress float64) []chromeButton {
+	if len(buttons) == 0 || progress >= 1 {
+		return buttons
+	}
+	progress = max(0, progress)
+	left, top := buttons[0].rect.x, buttons[0].rect.y
+	right, bottom := left+buttons[0].rect.w, top+buttons[0].rect.h
+	for _, button := range buttons[1:] {
+		left = min(left, button.rect.x)
+		top = min(top, button.rect.y)
+		right = max(right, button.rect.x+button.rect.w)
+		bottom = max(bottom, button.rect.y+button.rect.h)
+	}
+	const padding = 8.0
+	dx, dy := 0.0, 0.0
+	switch anchor {
+	case chromeAnchorTopLeft, chromeAnchorTopCenter, chromeAnchorTopRight:
+		dy = -(bottom + padding) * (1 - progress)
+	case chromeAnchorBottomLeft, chromeAnchorBottomCenter, chromeAnchorBottomRight:
+		dy = (height - top + padding) * (1 - progress)
+	case chromeAnchorLeftCenter:
+		dx = -(right + padding) * (1 - progress)
+	case chromeAnchorRightCenter:
+		dx = (width - left + padding) * (1 - progress)
+	}
+	shifted := make([]chromeButton, len(buttons))
+	copy(shifted, buttons)
+	for i := range shifted {
+		shifted[i].rect.x += dx
+		shifted[i].rect.y += dy
+	}
+	return shifted
 }
 
 func (a *App) drawHint(screen *ebiten.Image) {
@@ -727,9 +784,28 @@ func (chromeButtonsElement) Measure(_ *ui.Context, constraints ui.Constraints) u
 }
 
 func (e chromeButtonsElement) Draw(ctx *ui.Context, bounds ui.Rect) {
+	if len(e.buttons) > 0 {
+		left := e.buttons[0].rect.x
+		top := e.buttons[0].rect.y
+		right := e.buttons[0].rect.x + e.buttons[0].rect.w
+		bottom := e.buttons[0].rect.y + e.buttons[0].rect.h
+		for _, btn := range e.buttons[1:] {
+			left = min(left, btn.rect.x)
+			top = min(top, btn.rect.y)
+			right = max(right, btn.rect.x+btn.rect.w)
+			bottom = max(bottom, btn.rect.y+btn.rect.h)
+		}
+		const dockPadding = 8.0
+		dock := ui.Rect{X: left - dockPadding, Y: top - dockPadding, W: right - left + dockPadding*2, H: bottom - top + dockPadding*2}
+		// Match the translucent, softly outlined treatment of the macOS Dock
+		// while allowing the remote video to remain visible beneath it.
+		ctx.FillRoundedRect(dock, 10, ctx.Theme.ModalFill)
+	}
+
 	children := make([]ui.Element, 0, len(e.buttons))
 	for _, btn := range e.buttons {
 		btn := btn
+		cursorX, cursorY := ebiten.CursorPosition()
 		if ctx.Runtime != nil {
 			actionID := btn.id
 			onClick := btn.onClick
@@ -756,6 +832,8 @@ func (e chromeButtonsElement) Draw(ctx *ui.Context, bounds ui.Rect) {
 				Active:  btn.active,
 				Enabled: btn.enabled,
 				Alpha:   e.alpha,
+				Dock:    true,
+				Hovered: btn.rect.contains(cursorX, cursorY),
 			},
 		})
 	}
