@@ -19,6 +19,7 @@ import (
 	"github.com/bennerhq/jethq/pkg/input"
 	"github.com/bennerhq/jethq/pkg/logging"
 	"github.com/bennerhq/jethq/pkg/protocol/auth"
+	"github.com/bennerhq/jethq/pkg/remap"
 	"github.com/bennerhq/jethq/pkg/virtualmedia"
 )
 
@@ -1811,6 +1812,34 @@ func (c *Controller) ExecuteRemoteHotkey(action hotkeys.Action) error {
 	steps, err := hotkeys.MacroSteps(action)
 	if err != nil {
 		return err
+	}
+	return current.ExecuteKeyboardMacro(false, steps)
+}
+
+func (c *Controller) ExecuteRemoteShortcut(chords [][]input.Key) error {
+	current := c.clientIfConnected()
+	if current == nil {
+		return errors.New("client not connected")
+	}
+	steps, err := remap.MacroSteps(chords)
+	if err != nil {
+		return err
+	}
+	return current.ExecuteKeyboardMacro(false, steps)
+}
+
+// ExecuteRemoteText sends text through the keyboard layout configured on the JetKVM.
+func (c *Controller) ExecuteRemoteText(text string) error {
+	current := c.clientIfConnected()
+	if current == nil {
+		return errors.New("client not connected")
+	}
+	steps, invalid := input.BuildPasteMacro(c.Snapshot().KeyboardLayout, text, 20)
+	if len(invalid) > 0 {
+		return fmt.Errorf("character %q is not supported by the current keyboard layout", string(invalid[0]))
+	}
+	if len(steps) == 0 {
+		return errors.New("remote text is empty")
 	}
 	return current.ExecuteKeyboardMacro(false, steps)
 }

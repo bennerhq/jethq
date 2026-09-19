@@ -59,7 +59,12 @@ func NewClient() (*Client, error) {
 		httpClient: &http.Client{
 			Jar: jar,
 			Transport: &http.Transport{
-				Proxy:                 http.ProxyFromEnvironment,
+				// JetKVM devices are reached directly on the local network.  In
+				// particular, do not send their authentication or signaling traffic
+				// through a system HTTP proxy: proxies commonly return a 404 for the
+				// device-only /webrtc endpoints while a browser still reaches the
+				// device directly.
+				Proxy:                 nil,
 				DialContext:           (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 				ForceAttemptHTTP2:     false,
 				MaxIdleConns:          0,

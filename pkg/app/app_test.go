@@ -5,6 +5,8 @@ import (
 	"errors"
 	"image"
 	"image/color"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -346,6 +348,56 @@ func TestPreferencesNormalizeChromeAnchor(t *testing.T) {
 	}
 }
 
+func TestPreferencesPathUsesProjectConfigFile(t *testing.T) {
+	path, err := preferencesPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".config", "jethq", "confg.json")
+	if path != want {
+		t.Fatalf("preferences path = %q, want %q", path, want)
+	}
+}
+
+func TestPreferencesForStorageOmitsDefaults(t *testing.T) {
+	if stored := preferencesForStorage(defaultPreferences()); len(stored) != 0 {
+		t.Fatalf("stored default preferences = %#v, want empty", stored)
+	}
+}
+
+func TestPreferencesForStorageIncludesOnlyChangedValues(t *testing.T) {
+	prefs := defaultPreferences()
+	prefs.HideCursor = true
+	prefs.AbsoluteSideButtonsViaRel = false
+	stored := preferencesForStorage(prefs)
+	if len(stored) != 2 {
+		t.Fatalf("stored preferences = %#v, want two values", stored)
+	}
+	if stored["hide_cursor"] != true || stored["absolute_side_buttons_via_relative"] != false {
+		t.Fatalf("stored preferences = %#v, want changed values", stored)
+	}
+}
+
+func TestLoadPreferencesCreatesConfigFile(t *testing.T) {
+	originalHomeDir := userHomeDir
+	home := t.TempDir()
+	userHomeDir = func() (string, error) { return home, nil }
+	t.Cleanup(func() { userHomeDir = originalHomeDir })
+
+	_ = loadPreferences()
+	path, err := preferencesPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("startup config file was not created: %v", err)
+	}
+}
+
 func TestPreferencesNormalizeChromeLayout(t *testing.T) {
 	prefs := Preferences{ChromeLayout: ChromeLayout(255)}
 	prefs.normalize()
@@ -476,6 +528,11 @@ func TestMediaModeButtonsMeasureIntrinsicWidth(t *testing.T) {
 }
 
 func TestSavePreferencesUsesThrottleDurations(t *testing.T) {
+	originalHomeDir := userHomeDir
+	home := t.TempDir()
+	userHomeDir = func() (string, error) { return home, nil }
+	t.Cleanup(func() { userHomeDir = originalHomeDir })
+
 	app, err := New(Config{})
 	if err != nil {
 		t.Fatal(err)

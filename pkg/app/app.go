@@ -24,6 +24,7 @@ import (
 	"github.com/bennerhq/jethq/pkg/input"
 	"github.com/bennerhq/jethq/pkg/logging"
 	"github.com/bennerhq/jethq/pkg/nativeui"
+	"github.com/bennerhq/jethq/pkg/remap"
 	"github.com/bennerhq/jethq/pkg/session"
 	"github.com/bennerhq/jethq/pkg/ui"
 	"github.com/bennerhq/jethq/pkg/virtualmedia"
@@ -46,6 +47,7 @@ type App struct {
 	lastFrameAt            time.Time
 	keyboard               *input.Keyboard
 	hotkeys                hotkeys.Manager
+	remaps                 *remap.Engine
 	allowDiscovery         bool
 	lastX                  int
 	lastY                  int
@@ -66,6 +68,10 @@ type App struct {
 	uiVisibleUntil         time.Time
 	uiRevealStarted        time.Time
 	settingsOpen           bool
+	settingsExpandedWindow bool
+	keyboardLayoutMenuOpen bool
+	pendingKeyboardLayout  string
+	keyboardRemapEditor    keyboardRemapEditor
 	pasteOpen              bool
 	statsOpen              bool
 	statsPanel             rect
@@ -289,6 +295,7 @@ const (
 	settingsInputMQTTPassword
 	settingsInputMQTTBaseTopic
 	settingsInputMQTTDebounce
+	settingsInputKeyboardRemapUnicode
 )
 
 type mqttEditorState struct {
@@ -389,6 +396,21 @@ type macroEditorState struct {
 	Success    bool
 }
 
+type remapRecorderTarget uint8
+
+const (
+	remapRecorderNone remapRecorderTarget = iota
+	remapRecorderTrigger
+	remapRecorderOutput
+)
+
+type keyboardRemapEditor struct {
+	Rule     remap.Rule
+	Recorder remapRecorderTarget
+	Recorded [][]input.Key
+	Unicode  bool
+}
+
 type mediaFileRow struct {
 	Filename  string
 	Size      int64
@@ -418,6 +440,7 @@ func New(cfg Config) (*App, error) {
 		cfg:                 cfg,
 		keyboard:            input.NewKeyboard(),
 		hotkeys:             manager,
+		remaps:              remap.New(prefs.KeyboardRemaps),
 		allowDiscovery:      launcherOpen,
 		lastPhase:           session.PhaseIdle,
 		focused:             true,
@@ -510,7 +533,11 @@ func (a *App) Update() error {
 	}
 	if a.launcherOpen {
 		a.syncDiscovery()
-		a.syncLauncherInput()
+		if a.settingsOpen {
+			a.syncSettingsInput()
+		} else {
+			a.syncLauncherInput()
+		}
 		a.syncUIPointer()
 		a.updateTextSelectionDrag()
 		return nil
@@ -565,6 +592,9 @@ func (a *App) syncUIPointer() {
 		return
 	}
 	if a.launcherOpen {
+		if a.settingsOpen && a.settingsRuntime.HandlePointer(point, pressed, justPressed, justReleased) {
+			return
+		}
 		a.launcherRuntime.HandlePointer(point, pressed, justPressed, justReleased)
 		return
 	}
@@ -659,6 +689,7 @@ func frameToRGBA(src image.Image) *image.RGBA {
 func (a *App) Draw(screen *ebiten.Image) {
 	if a.launcherOpen {
 		a.drawLauncher(screen)
+		a.drawSettingsOverlay(screen, session.Snapshot{})
 		return
 	}
 	if a.ctrl == nil {
@@ -734,6 +765,21 @@ func (a *App) syncKeyboard() {
 	for _, rawKey := range rawKeys {
 		if key, ok := toInputKey(rawKey); ok {
 			keys = append(keys, key)
+		}
+	}
+	if a.remaps != nil {
+		result := a.remaps.Update(keys)
+		if result.Consumed {
+			if result.OutputText != "" {
+				a.releaseAllKeys(true)
+				a.suppressKeysUntilClear = true
+				_ = a.ctrl.ExecuteRemoteText(result.OutputText)
+			} else if len(result.OutputSteps) > 0 {
+				a.releaseAllKeys(true)
+				a.suppressKeysUntilClear = true
+				_ = a.ctrl.ExecuteRemoteShortcut(result.OutputSteps)
+			}
+			return
 		}
 	}
 	if a.handleExperimentalHotkeys(keys) {
@@ -1632,6 +1678,8 @@ func (a *App) currentSettingsTextValue() *string {
 		return &a.mqttEditor.BaseTopic
 	case settingsInputMQTTDebounce:
 		return &a.mqttEditor.DebounceMs
+	case settingsInputKeyboardRemapUnicode:
+		return &a.keyboardRemapEditor.Rule.OutputText
 	default:
 		return nil
 	}
@@ -2115,6 +2163,10 @@ func (a *App) syncSettingsInput() {
 	if !a.settingsOpen {
 		return
 	}
+	if a.keyboardRemapEditor.Recorder != remapRecorderNone {
+		a.captureKeyboardRemap()
+		return
+	}
 	if a.syncTextInputBinding() == nil {
 		return
 	}
@@ -2231,6 +2283,34 @@ func (a *App) syncSettingsInput() {
 		}
 		return
 	}
+}
+
+func (a *App) captureKeyboardRemap() {
+	keys := make([]input.Key, 0)
+	for _, raw := range inpututil.AppendPressedKeys(nil) {
+		if key, ok := toInputKey(raw); ok {
+			keys = append(keys, key)
+		}
+	}
+	if len(a.keyboardRemapEditor.Recorded) == 0 {
+		a.keyboardRemapEditor.Recorded = append(a.keyboardRemapEditor.Recorded, []input.Key{})
+	}
+	stroke := a.keyboardRemapEditor.Recorded[0]
+	for _, key := range keys {
+		if !containsInputKey(stroke, key) {
+			stroke = append(stroke, key)
+		}
+	}
+	a.keyboardRemapEditor.Recorded[0] = stroke
+}
+
+func containsInputKey(keys []input.Key, want input.Key) bool {
+	for _, key := range keys {
+		if key == want {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) invokeAction(id string) {
@@ -2363,6 +2443,8 @@ func (a *App) invokeAction(id string) {
 		a.invokeLocalAuthSubmit()
 	case "advanced_focus_ssh":
 		a.settingsInputFocus = settingsInputAdvancedSSH
+	case "keyboard_remap_focus_unicode":
+		a.settingsInputFocus = settingsInputKeyboardRemapUnicode
 	case "advanced_save_ssh":
 		a.invokeSaveSSHKey()
 	case "usb_network_focus_uplink_interface":
@@ -2798,6 +2880,22 @@ func (a *App) invokeAction(id string) {
 		a.macroEditor.Selected++
 	case "macro_save":
 		a.invokeSaveMacro()
+	case "keyboard_remap_add":
+		a.startKeyboardRemapEditor(remap.Rule{})
+	case "keyboard_remap_record_trigger":
+		a.toggleKeyboardRemapRecording(remapRecorderTrigger)
+	case "keyboard_remap_record_output":
+		a.toggleKeyboardRemapRecording(remapRecorderOutput)
+	case "keyboard_remap_unicode":
+		a.keyboardRemapEditor.Recorder = remapRecorderNone
+		a.keyboardRemapEditor.Unicode = true
+		a.keyboardRemapEditor.Rule.Output = nil
+		a.keyboardRemapEditor.Rule.OutputSteps = nil
+		a.settingsInputFocus = settingsInputKeyboardRemapUnicode
+	case "keyboard_remap_save":
+		a.saveKeyboardRemap()
+	case "keyboard_remap_cancel":
+		a.keyboardRemapEditor = keyboardRemapEditor{}
 	case "layout:en-US":
 		a.invokeKeyboardLayoutAction("en-US")
 	default:
@@ -2827,6 +2925,19 @@ func (a *App) invokeAction(id string) {
 		}
 		if macroID, ok := strings.CutPrefix(id, "macro_move_down:"); ok {
 			a.invokeMoveMacro(macroID, 1)
+			return
+		}
+		if remapID, ok := strings.CutPrefix(id, "keyboard_remap_edit:"); ok {
+			for _, rule := range a.prefs.KeyboardRemaps {
+				if rule.ID == remapID {
+					a.startKeyboardRemapEditor(rule)
+					return
+				}
+			}
+			return
+		}
+		if remapID, ok := strings.CutPrefix(id, "keyboard_remap_delete:"); ok {
+			a.deleteKeyboardRemap(remapID)
 			return
 		}
 		if len(id) > 8 && id[:8] == "section:" {
@@ -3683,6 +3794,9 @@ func (a *App) syncSessionState() {
 		if a.prefs.AbsoluteSideButtonsViaRel {
 			a.ensureConnectionUSBDevicesLoaded()
 		}
+		if layout := a.pendingKeyboardLayout; layout != "" && layout != snap.KeyboardLayout {
+			a.runAsync(func() { _ = a.ctrl.SetKeyboardLayout(layout) })
+		}
 	}
 	a.lastPhase = phase
 }
@@ -3718,6 +3832,9 @@ func (a *App) releaseAllKeys(send bool) {
 	if a.hotkeys != nil {
 		a.hotkeys.Reset()
 	}
+	if a.remaps != nil {
+		a.remaps.Reset()
+	}
 	if send {
 		for _, evt := range a.keyboard.ReleaseAll() {
 			_ = a.ctrl.SendKeypress(evt.HID, evt.Press)
@@ -3725,6 +3842,82 @@ func (a *App) releaseAllKeys(send bool) {
 		return
 	}
 	_ = a.keyboard.ReleaseAll()
+}
+
+func (a *App) startKeyboardRemapEditor(rule remap.Rule) {
+	if rule.ID == "" {
+		rule.ID = fmt.Sprintf("remap-%d", time.Now().UnixNano())
+	}
+	a.keyboardRemapEditor = keyboardRemapEditor{Rule: rule, Unicode: rule.OutputText != ""}
+}
+
+func (a *App) toggleKeyboardRemapRecording(target remapRecorderTarget) {
+	if a.keyboardRemapEditor.Recorder == target {
+		hasRecordedChord := len(a.keyboardRemapEditor.Recorded) > 0 && len(a.keyboardRemapEditor.Recorded[0]) > 0
+		if target == remapRecorderTrigger && hasRecordedChord {
+			a.keyboardRemapEditor.Rule.Trigger = append([]input.Key(nil), a.keyboardRemapEditor.Recorded[len(a.keyboardRemapEditor.Recorded)-1]...)
+		}
+		if target == remapRecorderOutput && hasRecordedChord {
+			a.keyboardRemapEditor.Rule.Output = nil
+			a.keyboardRemapEditor.Rule.OutputSteps = append([][]input.Key(nil), a.keyboardRemapEditor.Recorded...)
+		}
+		a.keyboardRemapEditor.Recorder = remapRecorderNone
+		return
+	}
+	a.keyboardRemapEditor.Recorder = target
+	if target == remapRecorderOutput {
+		a.keyboardRemapEditor.Unicode = false
+		a.keyboardRemapEditor.Rule.OutputText = ""
+	}
+	a.keyboardRemapEditor.Recorded = nil
+}
+
+func (a *App) saveKeyboardRemap() {
+	rule := a.keyboardRemapEditor.Rule
+	if len(rule.Trigger) == 0 || (len(rule.Output) == 0 && !hasKeyboardRemapOutput(rule.OutputSteps) && len([]rune(rule.OutputText)) != 1) {
+		return
+	}
+	rules := append([]remap.Rule(nil), a.prefs.KeyboardRemaps...)
+	found := false
+	for i := range rules {
+		if rules[i].ID == rule.ID {
+			rules[i] = rule
+			found = true
+		}
+	}
+	if !found {
+		rules = append(rules, rule)
+	}
+	a.prefs.KeyboardRemaps = rules
+	if a.remaps != nil {
+		a.remaps.SetRules(rules)
+	}
+	a.keyboardRemapEditor = keyboardRemapEditor{}
+	a.savePreferences()
+}
+
+func hasKeyboardRemapOutput(steps [][]input.Key) bool {
+	for _, step := range steps {
+		if len(step) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) deleteKeyboardRemap(id string) {
+	rules := make([]remap.Rule, 0, len(a.prefs.KeyboardRemaps))
+	for _, rule := range a.prefs.KeyboardRemaps {
+		if rule.ID != id {
+			rules = append(rules, rule)
+		}
+	}
+	a.prefs.KeyboardRemaps = rules
+	if a.remaps != nil {
+		a.remaps.SetRules(rules)
+	}
+	a.keyboardRemapEditor = keyboardRemapEditor{}
+	a.savePreferences()
 }
 
 func (a *App) armOverlayDismissSuppression() {
@@ -3749,6 +3942,13 @@ func (a *App) closeSettingsOverlay() {
 		return
 	}
 	a.settingsOpen = false
+	if a.settingsExpandedWindow {
+		width, height := InitialWindowSize(true)
+		ebiten.SetWindowSize(width, height)
+		a.settingsExpandedWindow = false
+	}
+	a.keyboardLayoutMenuOpen = false
+	a.keyboardRemapEditor = keyboardRemapEditor{}
 	a.h265ConfirmOpen = false
 	a.atxConfirmAction = ""
 	a.settingsInputFocus = settingsInputNone

@@ -8,13 +8,15 @@ import (
 )
 
 const (
-	DefaultWindowWidth  = 1280
-	DefaultWindowHeight = 720
-	BrowseWindowWidth   = 480
-	BrowseWindowHeight  = 640
-	targetWindowWidth   = 1920
-	targetWindowHeight  = 1080
-	usableMonitorFactor = 0.9
+	DefaultWindowWidth   = 1280
+	DefaultWindowHeight  = 720
+	BrowseWindowWidth    = 480
+	BrowseWindowHeight   = 640
+	SettingsWindowWidth  = 1040
+	SettingsWindowHeight = 820
+	targetWindowWidth    = 1920
+	targetWindowHeight   = 1080
+	usableMonitorFactor  = 0.9
 )
 
 func InitialWindowSize(browseMode bool) (int, int) {
@@ -24,6 +26,27 @@ func InitialWindowSize(browseMode bool) (int, int) {
 	}
 	monitorWidth, monitorHeight := monitor.Size()
 	return InitialWindowSizeForMonitor(monitorWidth, monitorHeight, browseMode)
+}
+
+// SettingsWindowSize returns a size large enough for the Settings dialog while
+// keeping it within the usable area of the current display.
+func SettingsWindowSize() (int, int) {
+	monitor := ebiten.Monitor()
+	if monitor == nil {
+		return SettingsWindowWidth, SettingsWindowHeight
+	}
+	monitorWidth, monitorHeight := monitor.Size()
+	if monitorWidth <= 0 || monitorHeight <= 0 {
+		return SettingsWindowWidth, SettingsWindowHeight
+	}
+	width, height := SettingsWindowWidth, SettingsWindowHeight
+	if usableWidth := int(math.Floor(float64(monitorWidth) * usableMonitorFactor)); width > usableWidth {
+		width = usableWidth
+	}
+	if usableHeight := int(math.Floor(float64(monitorHeight) * usableMonitorFactor)); height > usableHeight {
+		height = usableHeight
+	}
+	return width, height
 }
 
 func InitialWindowSizeForMonitor(monitorWidth, monitorHeight int, browseMode bool) (int, int) {

@@ -105,7 +105,10 @@ func (launcherScreenElement) Measure(_ *ui.Context, constraints ui.Constraints) 
 func (e launcherScreenElement) Draw(ctx *ui.Context, bounds ui.Rect) {
 	validInput := strings.TrimSpace(e.app.launcherInput) != "" && isValidConnectHost(strings.TrimSpace(e.app.launcherInput))
 	children := []ui.Child{
-		ui.Fixed(ui.Label{Text: "JetKVM", Size: 30, Color: ctx.Theme.Title}),
+		ui.Fixed(ui.Row{Children: []ui.Child{
+			ui.Flex(ui.Label{Text: "JetKVM", Size: 30, Color: ctx.Theme.Title}, 1),
+			ui.Fixed(ui.Button{Label: "Settings", Enabled: true, OnClick: func() { e.app.openSettingsOverlay() }}),
+		}, Spacing: 12}),
 		ui.Fixed(ui.Spacer{H: 12}),
 		ui.Fixed(ui.Label{Text: "Available devices on your local network", Size: 15, Color: ctx.Theme.Muted}),
 		ui.Fixed(ui.Spacer{H: 28}),

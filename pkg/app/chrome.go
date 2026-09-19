@@ -446,12 +446,7 @@ func (a *App) layoutChromeButtons(width, height int, snap session.Snapshot) []ch
 			if a.settingsOpen {
 				a.closeSettingsOverlay()
 			} else {
-				a.settingsOpen = true
-				a.pasteOpen = false
-				a.mediaOpen = false
-				a.serialConsoleOpen = false
-				a.refreshSettingsSection(a.settingsSection)
-				a.applyCursorMode()
+				a.openSettingsOverlay()
 			}
 			a.revealUIFor(1200 * time.Millisecond)
 		}},
@@ -799,7 +794,7 @@ func (e chromeButtonsElement) Draw(ctx *ui.Context, bounds ui.Rect) {
 		dock := ui.Rect{X: left - dockPadding, Y: top - dockPadding, W: right - left + dockPadding*2, H: bottom - top + dockPadding*2}
 		// Match the translucent, softly outlined treatment of the macOS Dock
 		// while allowing the remote video to remain visible beneath it.
-		ctx.FillRoundedRect(dock, 10, ctx.Theme.ModalFill)
+		ctx.FillStrokedRoundedRect(dock, 1, 10, ctx.Theme.ModalStroke, ctx.Theme.ModalFill)
 	}
 
 	children := make([]ui.Element, 0, len(e.buttons))
@@ -1207,7 +1202,7 @@ func (a *App) settingsPanelHeight(section settingsSectionDef, contentW float64) 
 }
 
 func (a *App) settingsSectionBodyHeight(section settingsSection, w float64) float64 {
-	return a.measureSettingsBody(a.settingsSectionBody(section, a.ctrl.Snapshot()), w)
+	return a.measureSettingsBody(a.settingsSectionBody(section, a.ctrlSnapshot()), w)
 }
 
 func settingsSidebarHeight(count int) float64 {
@@ -1245,10 +1240,27 @@ func settingsSidebarMetrics(panelH float64, count int) (btnH, gap, fontSize floa
 }
 
 func (a *App) refreshSettingsSection(section settingsSection) {
+	if a.ctrl == nil || a.ctrl.Snapshot().Phase != session.PhaseConnected {
+		return
+	}
 	seq := a.markSettingsSectionLoading(section)
 	go func() {
 		_ = a.loadSettingsSection(section, seq)
 	}()
+}
+
+func (a *App) openSettingsOverlay() {
+	if a.launcherOpen && !a.settingsExpandedWindow {
+		width, height := SettingsWindowSize()
+		ebiten.SetWindowSize(width, height)
+		a.settingsExpandedWindow = true
+	}
+	a.settingsOpen = true
+	a.pasteOpen = false
+	a.mediaOpen = false
+	a.serialConsoleOpen = false
+	a.refreshSettingsSection(a.settingsSection)
+	a.applyCursorMode()
 }
 
 func (a *App) refreshSettingsSectionSync(section settingsSection) error {
@@ -2289,6 +2301,9 @@ func (a *App) settingsGeneralBody(snap session.Snapshot) ui.Element {
 
 func (a *App) settingsKeyboardBody(snap session.Snapshot) ui.Element {
 	layout := snap.KeyboardLayout
+	if a.pendingKeyboardLayout != "" {
+		layout = a.pendingKeyboardLayout
+	}
 	if layout == "" {
 		layout = "en-US"
 	}
@@ -2300,33 +2315,44 @@ func (a *App) settingsKeyboardBody(snap session.Snapshot) ui.Element {
 	}
 	layoutState := a.settingsAction(settingsGroupKeyboardLayout)
 	options := input.SupportedKeyboardLayouts()
-	buttons := make([]ui.Element, 0, len(options))
-	for _, option := range options {
-		btnW := 94.0
-		if len(option.Label) > 7 {
-			btnW = 112
-		}
-		option := option
-		buttons = append(buttons, settingsActionButton(option.Label, settingsActionVisual{
-			Enabled: snap.Phase == session.PhaseConnected && (!layoutState.Pending || layoutState.PendingChoice == option.Code),
-			Active:  layout == option.Code,
-			Pending: layoutState.Pending && layoutState.PendingChoice == option.Code,
-		}, btnW, func() {
-			if a.settingsActionPending(settingsGroupKeyboardLayout) {
-				return
-			}
-			a.withSettingsAction(settingsGroupKeyboardLayout, option.Code, func() error {
-				return a.ctrl.SetKeyboardLayout(option.Code)
-			})
-		}))
-	}
+	layoutPickerEnabled := !layoutState.Pending
 	children := []ui.Child{
 		ui.Fixed(ui.Paragraph{Text: "This layout affects paste and keyboard macros. Live typing is sent as physical HID keys.", Size: 12, Color: a.currentTheme().Muted}),
 		ui.Fixed(ui.Spacer{H: 18}),
-		ui.Fixed(ui.Row{Children: []ui.Child{
-			ui.Fixed(settingsKeyValueElement("Active layout", keyboardLayoutLabel(layout), 118)),
-			ui.Flex(ui.Spacer{}, 1),
-		}, Spacing: 12}),
+		ui.Fixed(settingsSectionLabelElement("Keyboard layout")),
+		ui.Fixed(ui.Spacer{H: 8}),
+		ui.Fixed(settingsActionButton(keyboardLayoutLabel(layout)+"  ▾", settingsActionVisual{Enabled: layoutPickerEnabled, Active: a.keyboardLayoutMenuOpen}, 0, func() {
+			a.keyboardLayoutMenuOpen = !a.keyboardLayoutMenuOpen
+		})),
+	}
+	if a.keyboardLayoutMenuOpen {
+		choices := make([]ui.Element, 0, len(options))
+		for _, option := range options {
+			option := option
+			label := option.Label + " (" + option.Code + ")"
+			if layout == option.Code {
+				label = "✓ " + label
+			}
+			choices = append(choices, settingsActionButton(label, settingsActionVisual{Enabled: layoutPickerEnabled, Active: layout == option.Code, Pending: layoutState.Pending && layoutState.PendingChoice == option.Code}, 216, func() {
+				if a.settingsActionPending(settingsGroupKeyboardLayout) {
+					return
+				}
+				a.keyboardLayoutMenuOpen = false
+				a.pendingKeyboardLayout = option.Code
+				if snap.Phase != session.PhaseConnected || a.ctrl == nil {
+					return
+				}
+				a.withSettingsAction(settingsGroupKeyboardLayout, option.Code, func() error {
+					return a.ctrl.SetKeyboardLayout(option.Code)
+				})
+			}))
+		}
+		children = append(children,
+			ui.Fixed(ui.Spacer{H: 10}),
+			ui.Fixed(ui.Wrap{Children: choices, Spacing: 10, LineSpacing: 8}),
+		)
+	}
+	children = append(children,
 		ui.Fixed(ui.Spacer{H: 18}),
 		ui.Fixed(settingsToggleRowControl("Show Pressed Keys", settingsActionVisual{Enabled: true, Active: a.showPressedKeys}, func() {
 			a.showPressedKeys = !a.showPressedKeys
@@ -2343,11 +2369,7 @@ func (a *App) settingsKeyboardBody(snap session.Snapshot) ui.Element {
 		})),
 		ui.Fixed(ui.Spacer{H: 12}),
 		ui.Fixed(settingsKeyValueElement("Backend", experimentalHotkeyBackendLabel(capability), 76)),
-		ui.Fixed(ui.Spacer{H: 18}),
-		ui.Fixed(settingsSectionLabelElement("Layout presets")),
-		ui.Fixed(ui.Spacer{H: 10}),
-		ui.Fixed(ui.Wrap{Children: buttons, Spacing: 10, LineSpacing: 8}),
-	}
+	)
 	switch {
 	case layoutState.Pending:
 		children = append(children, ui.Fixed(ui.Spacer{H: 12}), ui.Fixed(settingsStatusElement("Applying…", a.currentTheme().WarningStroke)))
@@ -2368,8 +2390,118 @@ func (a *App) settingsKeyboardBody(snap session.Snapshot) ui.Element {
 	children = append(children,
 		ui.Fixed(ui.Spacer{H: 14}),
 		ui.Fixed(ui.Paragraph{Text: "Make this match the remote OS only for pasted text and macros.", Size: 13, Color: a.currentTheme().Muted}),
+		ui.Fixed(ui.Spacer{H: 18}),
+		ui.Fixed(a.keyboardRemapsElement()),
 	)
 	return settingsCardElement("", ui.Column{Children: children})
+}
+
+func keyboardRemapChordLabel(keys []input.Key) string {
+	if len(keys) == 0 {
+		return "Not recorded"
+	}
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key.String())
+	}
+	return strings.Join(parts, " + ")
+}
+
+func keyboardRemapStepsLabel(steps [][]input.Key) string {
+	if len(steps) == 0 {
+		return "Not recorded"
+	}
+	parts := make([]string, 0, len(steps))
+	for _, step := range steps {
+		parts = append(parts, keyboardRemapChordLabel(step))
+	}
+	return strings.Join(parts, " → ")
+}
+
+func (a *App) keyboardRemapsElement() ui.Element {
+	editor := a.keyboardRemapEditor
+	children := []ui.Child{
+		ui.Fixed(settingsSectionLabelElement("Keyboard remaps")),
+		ui.Fixed(ui.Spacer{H: 8}),
+		ui.Fixed(ui.Paragraph{Text: "Convert a focused local shortcut into recorded remote keystrokes. The local keys are not forwarded.", Size: 12, Color: a.currentTheme().Muted}),
+		ui.Fixed(ui.Spacer{H: 12}),
+	}
+	if editor.Rule.ID == "" {
+		children = append(children, ui.Fixed(settingsActionElement("keyboard_remap_add", "Add keyboard remap", settingsActionVisual{Enabled: true}, 0)))
+		for _, rule := range a.prefs.KeyboardRemaps {
+			rule := rule
+			outputSteps := rule.OutputSteps
+			if len(outputSteps) == 0 && len(rule.Output) > 0 {
+				outputSteps = [][]input.Key{rule.Output}
+			}
+			remoteLabel := keyboardRemapStepsLabel(outputSteps)
+			if rule.OutputText != "" {
+				remoteLabel = fmt.Sprintf("Unicode %q", rule.OutputText)
+			}
+			children = append(children,
+				ui.Fixed(ui.Spacer{H: 10}),
+				ui.Fixed(settingsCardElement(keyboardRemapChordLabel(rule.Trigger), ui.Column{Children: []ui.Child{
+					ui.Fixed(settingsKeyValueElement("Remote", remoteLabel, 72)),
+					ui.Fixed(ui.Spacer{H: 10}),
+					ui.Fixed(ui.Wrap{Children: []ui.Element{
+						settingsActionElement("keyboard_remap_edit:"+rule.ID, "Edit", settingsActionVisual{Enabled: true}, 62),
+						settingsActionElement("keyboard_remap_delete:"+rule.ID, "Delete", settingsActionVisual{Enabled: true}, 72),
+					}, Spacing: 10, LineSpacing: 8}),
+				}})),
+			)
+		}
+		return ui.Column{Children: children}
+	}
+	triggerLabel := keyboardRemapChordLabel(editor.Rule.Trigger)
+	outputLabel := keyboardRemapStepsLabel(editor.Rule.OutputSteps)
+	if len(editor.Rule.OutputSteps) == 0 {
+		outputLabel = keyboardRemapChordLabel(editor.Rule.Output)
+	}
+	if editor.Unicode {
+		if editor.Rule.OutputText == "" {
+			outputLabel = "Enter one Unicode character"
+		} else {
+			outputLabel = fmt.Sprintf("Unicode %q", editor.Rule.OutputText)
+		}
+	}
+	if editor.Recorder == remapRecorderTrigger {
+		triggerLabel = "Recording… press the button again to stop"
+	}
+	if editor.Recorder == remapRecorderOutput {
+		keyCount := 0
+		if len(editor.Recorded) > 0 {
+			keyCount = len(editor.Recorded[0])
+		}
+		outputLabel = fmt.Sprintf("Recording %d key(s)… press the button again to stop", keyCount)
+	}
+	children = append(children,
+		ui.Fixed(settingsKeyValueElement("Local", triggerLabel, 72)),
+		ui.Fixed(ui.Spacer{H: 8}),
+		ui.Fixed(settingsActionElement("keyboard_remap_record_trigger", map[bool]string{true: "Stop local recording", false: "Start local recording"}[editor.Recorder == remapRecorderTrigger], settingsActionVisual{Enabled: editor.Recorder == remapRecorderNone || editor.Recorder == remapRecorderTrigger, Active: editor.Recorder == remapRecorderTrigger}, 0)),
+		ui.Fixed(ui.Spacer{H: 14}),
+		ui.Fixed(settingsKeyValueElement("Remote", outputLabel, 72)),
+		ui.Fixed(ui.Spacer{H: 8}),
+		ui.Fixed(ui.Wrap{Children: []ui.Element{
+			settingsActionElement("keyboard_remap_record_output", map[bool]string{true: "Stop recording keys", false: "Record key strokes"}[editor.Recorder == remapRecorderOutput], settingsActionVisual{Enabled: editor.Recorder == remapRecorderNone || editor.Recorder == remapRecorderOutput, Active: editor.Recorder == remapRecorderOutput}, 0),
+			settingsActionElement("keyboard_remap_unicode", "Send Unicode character", settingsActionVisual{Enabled: editor.Recorder == remapRecorderNone, Active: editor.Unicode}, 0),
+		}, Spacing: 10, LineSpacing: 8}),
+	)
+	if editor.Unicode {
+		children = append(children,
+			ui.Fixed(ui.Spacer{H: 10}),
+			ui.Fixed(a.decorateTextField(ui.TextField{ID: "keyboard_remap_focus_unicode", Value: editor.Rule.OutputText, Placeholder: "@", Focused: a.settingsInputFocus == settingsInputKeyboardRemapUnicode, Enabled: editor.Recorder == remapRecorderNone})),
+			ui.Fixed(ui.Spacer{H: 8}),
+			ui.Fixed(ui.Paragraph{Text: "Enter exactly one Unicode character. It is sent using the JetKVM keyboard layout.", Size: 12, Color: a.currentTheme().Muted}),
+		)
+	}
+	children = append(children,
+		ui.Fixed(ui.Spacer{H: 16}),
+		ui.Fixed(ui.Wrap{Children: []ui.Element{
+			settingsActionElement("keyboard_remap_save", "Save remap", settingsActionVisual{Enabled: editor.Recorder == remapRecorderNone && len(editor.Rule.Trigger) > 0 && (len(editor.Rule.Output) > 0 || hasKeyboardRemapOutput(editor.Rule.OutputSteps) || len([]rune(editor.Rule.OutputText)) == 1)}, 96),
+			settingsActionElement("keyboard_remap_cancel", "Cancel", settingsActionVisual{Enabled: true}, 72),
+		}, Spacing: 10, LineSpacing: 8}),
+	)
+	return ui.Column{Children: children}
 }
 
 func experimentalHotkeyBackendLabel(capability hotkeys.Capability) string {

@@ -1,11 +1,14 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/bennerhq/jethq/pkg/remap"
 )
 
 type Preferences struct {
@@ -20,11 +23,14 @@ type Preferences struct {
 	InvertScroll              bool           `json:"invert_scroll"`
 	ShowPressedKeys           bool           `json:"show_pressed_keys"`
 	ExperimentalGlobalHotkeys bool           `json:"experimental_global_hotkeys"`
+	KeyboardRemaps            []remap.Rule   `json:"keyboard_remaps,omitempty"`
 	AbsoluteSideButtonsViaRel bool           `json:"absolute_side_buttons_via_relative"`
 	ScrollThrottle            ScrollThrottle `json:"scroll_throttle"`
 	ScrollThrottleMs          int            `json:"scroll_throttle_ms,omitempty"`
 	PointerMoveThrottleMs     int            `json:"pointer_move_throttle_ms,omitempty"`
 }
+
+var userHomeDir = os.UserHomeDir
 
 //go:generate go tool github.com/dmarkham/enumer -type=Theme,ChromeAnchor,ChromeLayout,ScrollThrottle -linecomment -json -text -output prefs_enums.go
 
@@ -97,26 +103,34 @@ func loadPreferences() Preferences {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return defaultPreferences()
+		prefs := defaultPreferences()
+		if errors.Is(err, os.ErrNotExist) {
+			_ = savePreferences(prefs)
+		}
+		return prefs
 	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return defaultPreferences()
 	}
-	var prefs Preferences
+	prefs := defaultPreferences()
 	if err := json.Unmarshal(data, &prefs); err != nil {
 		return defaultPreferences()
 	}
-	if _, ok := raw["absolute_side_buttons_via_relative"]; !ok {
-		prefs.AbsoluteSideButtonsViaRel = true
+	if _, ok := raw["chrome_anchor_migrated"]; !ok {
+		if _, hasAnchor := raw["chrome_anchor"]; hasAnchor {
+			prefs.ChromeAnchorMigrated = false
+		}
 	}
 	if _, ok := raw["scroll_throttle_ms"]; !ok {
-		prefs.ScrollThrottleMs = int(scrollThrottleFromPref(prefs.ScrollThrottle) / time.Millisecond)
-	}
-	if _, ok := raw["pointer_move_throttle_ms"]; !ok {
-		prefs.PointerMoveThrottleMs = defaultPointerMoveThrottleMs
+		if _, hasLegacyThrottle := raw["scroll_throttle"]; hasLegacyThrottle {
+			prefs.ScrollThrottleMs = int(scrollThrottleFromPref(prefs.ScrollThrottle) / time.Millisecond)
+		}
 	}
 	prefs.normalize()
+	if stored, err := json.MarshalIndent(preferencesForStorage(prefs), "", "  "); err == nil && !bytes.Equal(bytes.TrimSpace(data), stored) {
+		_ = savePreferences(prefs)
+	}
 	return prefs
 }
 
@@ -126,7 +140,7 @@ func savePreferences(prefs Preferences) error {
 		return err
 	}
 	prefs.normalize()
-	data, err := json.MarshalIndent(prefs, "", "  ")
+	data, err := json.MarshalIndent(preferencesForStorage(prefs), "", "  ")
 	if err != nil {
 		return err
 	}
@@ -136,15 +150,66 @@ func savePreferences(prefs Preferences) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
+func preferencesForStorage(prefs Preferences) map[string]any {
+	defaults := defaultPreferences()
+	stored := make(map[string]any)
+	if prefs.Theme != defaults.Theme {
+		stored["theme"] = prefs.Theme
+	}
+	if prefs.PinChrome != defaults.PinChrome {
+		stored["pin_chrome"] = prefs.PinChrome
+	}
+	if prefs.HideHeaderBar != defaults.HideHeaderBar {
+		stored["hide_header_bar"] = prefs.HideHeaderBar
+	}
+	if prefs.HideStatusBar != defaults.HideStatusBar {
+		stored["hide_status_bar"] = prefs.HideStatusBar
+	}
+	if prefs.ChromeAnchor != defaults.ChromeAnchor {
+		stored["chrome_anchor"] = prefs.ChromeAnchor
+	}
+	if prefs.ChromeAnchorMigrated != defaults.ChromeAnchorMigrated {
+		stored["chrome_anchor_migrated"] = prefs.ChromeAnchorMigrated
+	}
+	if prefs.ChromeLayout != defaults.ChromeLayout {
+		stored["chrome_layout"] = prefs.ChromeLayout
+	}
+	if prefs.HideCursor != defaults.HideCursor {
+		stored["hide_cursor"] = prefs.HideCursor
+	}
+	if prefs.InvertScroll != defaults.InvertScroll {
+		stored["invert_scroll"] = prefs.InvertScroll
+	}
+	if prefs.ShowPressedKeys != defaults.ShowPressedKeys {
+		stored["show_pressed_keys"] = prefs.ShowPressedKeys
+	}
+	if prefs.ExperimentalGlobalHotkeys != defaults.ExperimentalGlobalHotkeys {
+		stored["experimental_global_hotkeys"] = prefs.ExperimentalGlobalHotkeys
+	}
+	if len(prefs.KeyboardRemaps) > 0 {
+		stored["keyboard_remaps"] = prefs.KeyboardRemaps
+	}
+	if prefs.AbsoluteSideButtonsViaRel != defaults.AbsoluteSideButtonsViaRel {
+		stored["absolute_side_buttons_via_relative"] = prefs.AbsoluteSideButtonsViaRel
+	}
+	if prefs.ScrollThrottle != defaults.ScrollThrottle {
+		stored["scroll_throttle"] = prefs.ScrollThrottle
+	}
+	if prefs.ScrollThrottleMs != defaults.ScrollThrottleMs {
+		stored["scroll_throttle_ms"] = prefs.ScrollThrottleMs
+	}
+	if prefs.PointerMoveThrottleMs != defaults.PointerMoveThrottleMs {
+		stored["pointer_move_throttle_ms"] = prefs.PointerMoveThrottleMs
+	}
+	return stored
+}
+
 func preferencesPath() (string, error) {
-	root, err := os.UserConfigDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
-	if root == "" {
-		return "", errors.New("config directory unavailable")
-	}
-	return filepath.Join(root, "jetkvm-desktop", "preferences.json"), nil
+	return filepath.Join(home, ".config", "jethq", "confg.json"), nil
 }
 
 func (p *Preferences) normalize() {

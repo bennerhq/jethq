@@ -22,6 +22,9 @@ func TestNewClientDisablesKeepAlives(t *testing.T) {
 	if !transport.DisableKeepAlives {
 		t.Fatal("expected keep-alives to be disabled")
 	}
+	if transport.Proxy != nil {
+		t.Fatal("expected direct connections without a system HTTP proxy")
+	}
 }
 
 func TestLoginReturnsDeviceErrorMessage(t *testing.T) {

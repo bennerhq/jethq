@@ -1,0 +1,32 @@
+{
+  "theme": "system",
+  "pin_chrome": false,
+  "hide_header_bar": false,
+  "hide_status_bar": false,
+  "chrome_anchor": "bottom_right",
+  "chrome_anchor_migrated": true,
+  "chrome_layout": "horizontal",
+  "hide_cursor": false,
+  "invert_scroll": false,
+  "show_pressed_keys": false,
+  "experimental_global_hotkeys": false,
+  "keyboard_remaps": [
+    {
+      "id": "remap-1787657700673322000",
+      "trigger": [
+        111,
+        114,
+        41
+      ],
+      "output_steps": [
+        [
+          41,
+          114
+        ]
+      ]
+    }
+  ],
+  "absolute_side_buttons_via_relative": true,
+  "scroll_throttle": "0",
+  "pointer_move_throttle_ms": 8
+}

@@ -26,4 +26,8 @@ sips -z 1024 1024 "$icon" --out "$iconset/icon_512x512@2x.png" >/dev/null
 iconutil -c icns "$iconset" -o "$bundle/Contents/Resources/JetHQ.icns"
 
 cd "$root"
-go build -o "$bundle/Contents/MacOS/jethq" ./cmd/jetkvm-desktop
+# Build once, then place that exact executable in the app bundle.  Keeping the
+# command-line binary and Finder-launched application identical avoids subtle
+# behavior differences caused by separate Go builds.
+go build -o "$root/jethq" ./cmd/jetkvm-desktop
+cp "$root/jethq" "$bundle/Contents/MacOS/jethq"

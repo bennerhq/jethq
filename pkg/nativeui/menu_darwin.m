@@ -13,6 +13,7 @@ extern void jetkvmNativeMenuAction(char *action);
     jetkvmNativeMenuAction((char *)action);
   }
 }
+
 @end
 
 static JetKVMMenuTarget *jetkvmMenuTarget;

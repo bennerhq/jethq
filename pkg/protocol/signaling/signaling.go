@@ -103,6 +103,9 @@ func DialWebsocket(ctx context.Context, client *http.Client, baseURL string) (*w
 		}
 	}
 
-	var dialer websocket.Dialer
+	// Keep WebSocket signaling on the same direct LAN path as HTTP requests.
+	// A system proxy can answer the upgrade request with a misleading 404 even
+	// though the JetKVM's web interface is reachable directly.
+	dialer := websocket.Dialer{Proxy: nil}
 	return dialer.DialContext(ctx, wsURL, header)
 }

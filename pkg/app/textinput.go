@@ -17,7 +17,7 @@ type textBinding struct {
 }
 
 func (a *App) currentTextBinding() *textBinding {
-	if a.launcherOpen {
+	if a.launcherOpen && !a.settingsOpen {
 		switch a.launcherMode {
 		case launcherModeBrowse:
 			return &textBinding{
@@ -142,6 +142,8 @@ func (f settingsInputField) actionID() string {
 		return "mqtt_focus_base_topic"
 	case settingsInputMQTTDebounce:
 		return "mqtt_focus_debounce"
+	case settingsInputKeyboardRemapUnicode:
+		return "keyboard_remap_focus_unicode"
 	default:
 		return ""
 	}
@@ -161,7 +163,7 @@ func (a *App) uiTextBinding() *ui.TextInputBinding {
 }
 
 func (a *App) pointerTextBinding(id string) *textBinding {
-	if a.launcherOpen {
+	if a.launcherOpen && !a.settingsOpen {
 		switch id {
 		case "launcher_focus_input":
 			return &textBinding{
