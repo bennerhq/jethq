@@ -130,6 +130,7 @@ func loadPreferences() Preferences {
 	if err != nil {
 		return defaultPreferences()
 	}
+	migrateLegacyPreferences(path)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		prefs := defaultPreferences()
@@ -241,7 +242,24 @@ func preferencesPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "jethq", "confg.json"), nil
+	return filepath.Join(home, ".config", "jethq", "config.json"), nil
+}
+
+// legacyPreferencesFile is the misspelled name earlier releases wrote to.
+const legacyPreferencesFile = "confg.json"
+
+// migrateLegacyPreferences renames a preferences file written under the old
+// misspelled name to path. An existing file at path always wins, and the
+// legacy file is then left untouched.
+func migrateLegacyPreferences(path string) {
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	legacy := filepath.Join(filepath.Dir(path), legacyPreferencesFile)
+	if _, err := os.Stat(legacy); err != nil {
+		return
+	}
+	_ = os.Rename(legacy, path)
 }
 
 func (p *Preferences) normalize() {

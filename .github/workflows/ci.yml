@@ -81,7 +81,7 @@ jobs:
           if [ "$RUNNER_OS" = "macOS" ]; then
             sh scripts/build-macos-app.sh "dist/pkg/jethq.app"
           else
-            go build -trimpath -ldflags="-s -w" -o "dist/pkg/${{ matrix.client_bin }}" ./cmd/jetkvm-desktop
+            go build -trimpath -ldflags="-s -w" -o "dist/pkg/${{ matrix.client_bin }}" ./cmd/jethq
           fi
           cp README.md dist/pkg/
           tar -C dist/pkg -czf "dist/${{ matrix.archive_name }}" .
@@ -95,7 +95,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist/pkg | Out-Null
           $env:CGO_LDFLAGS = "-static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic"
-          go build -trimpath -ldflags='-s -w -extldflags "-static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic"' -o "dist/pkg/${{ matrix.client_bin }}" ./cmd/jetkvm-desktop
+          go build -trimpath -ldflags='-s -w -extldflags "-static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic"' -o "dist/pkg/${{ matrix.client_bin }}" ./cmd/jethq
           Copy-Item README.md dist/pkg/README.md
           Compress-Archive -Path dist/pkg/* -DestinationPath "dist/${{ matrix.archive_name }}"
 

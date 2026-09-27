@@ -9,12 +9,12 @@ import (
 )
 
 func TestLiveDeviceConnectsAndStreams(t *testing.T) {
-	baseURL := os.Getenv("JETKVM_BASE_URL")
+	baseURL := os.Getenv("JETHQ_BASE_URL")
 	if baseURL == "" {
-		t.Skip("JETKVM_BASE_URL not set")
+		t.Skip("JETHQ_BASE_URL not set")
 	}
 
-	password := os.Getenv("JETKVM_PASSWORD")
+	password := os.Getenv("JETHQ_PASSWORD")
 
 	c, err := New(Config{
 		BaseURL:    baseURL,
@@ -87,7 +87,7 @@ func TestLiveDeviceConnectsAndStreams(t *testing.T) {
 		t.Fatalf("unexpected stream quality factor %v", quality)
 	}
 	restoreQuality := quality
-	if os.Getenv("JETKVM_LIVE_ALLOW_SETTING_MUTATIONS") == "1" {
+	if os.Getenv("JETHQ_LIVE_ALLOW_SETTING_MUTATIONS") == "1" {
 		testQuality := 0.5
 		if quality == testQuality {
 			testQuality = 0.6

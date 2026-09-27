@@ -1,6 +1,6 @@
 research/
 .cache/
-/jetkvm-desktop
+/jethq
 
 # Go binaries, plugins, and test artifacts.
 *.exe

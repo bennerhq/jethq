@@ -19,8 +19,13 @@ import (
 	"github.com/bennerhq/jethq/pkg/nativeui"
 )
 
-const defaultPasswordEnv = "JETKVM_PASSWORD"
-const experimentalUSBNetworkEnv = "JETKVM_DESKTOP_ENABLE_EXPERIMENTAL_USB_NETWORK"
+const defaultPasswordEnv = "JETHQ_PASSWORD"
+const experimentalUSBNetworkEnv = "JETHQ_ENABLE_EXPERIMENTAL_USB_NETWORK"
+
+// Environment variable names used before the jethq rename, still honoured as
+// fallbacks so existing setups keep working.
+const legacyPasswordEnv = "JETKVM_PASSWORD"
+const legacyExperimentalUSBNetworkEnv = "JETKVM_DESKTOP_ENABLE_EXPERIMENTAL_USB_NETWORK"
 
 func readPassword(r io.Reader) (string, error) {
 	data, err := io.ReadAll(r)
@@ -39,7 +44,10 @@ func resolvePassword(passwordFromStdin bool, passwordEnv string, stdin io.Reader
 	case passwordEnv != "":
 		return getenv(passwordEnv), nil
 	default:
-		return getenv(defaultPasswordEnv), nil
+		if password := getenv(defaultPasswordEnv); password != "" {
+			return password, nil
+		}
+		return getenv(legacyPasswordEnv), nil
 	}
 }
 
@@ -75,7 +83,7 @@ func main() {
 			if err := logging.Configure(logLevel); err != nil {
 				return err
 			}
-			cfg.ExperimentalUSBNetwork = envEnabled(experimentalUSBNetworkEnv, os.Getenv)
+			cfg.ExperimentalUSBNetwork = envEnabled(experimentalUSBNetworkEnv, os.Getenv) || envEnabled(legacyExperimentalUSBNetworkEnv, os.Getenv)
 
 			clientApp, err := app.New(cfg)
 			if err != nil {
@@ -97,7 +105,7 @@ func main() {
 	}
 	rootCmd.Flags().BoolVar(&passwordFromStdin, "password-stdin", false, "Read password for local auth mode from stdin")
 	rootCmd.Flags().StringVar(&passwordEnv, "password-env", "", fmt.Sprintf("Read password for local auth mode from the named environment variable (default fallback: %s)", defaultPasswordEnv))
-	rootCmd.Flags().StringVar(&logLevel, "log-level", "", fmt.Sprintf("Log level: error, warn, info, debug, trace (default: error; env: JETKVM_DESKTOP_LOG_LEVEL; experimental USB network UI env: %s)", experimentalUSBNetworkEnv))
+	rootCmd.Flags().StringVar(&logLevel, "log-level", "", fmt.Sprintf("Log level: error, warn, info, debug, trace (default: error; env: JETHQ_LOG_LEVEL; experimental USB network UI env: %s)", experimentalUSBNetworkEnv))
 	rootCmd.Flags().DurationVar(&cfg.RPCTimeout, "rpc-timeout", 5*time.Second, "Timeout for JSON-RPC requests")
 
 	if err := rootCmd.Execute(); err != nil {

@@ -154,7 +154,7 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	s := &Server{
 		cfg:   cfg,
-		token: "jetkvm-desktop-emulator-token",
+		token: "jethq-emulator-token",
 		state: DeviceState{
 			DeviceID:        "emu-jetkvm-001",
 			ActiveExtension: "",
@@ -490,7 +490,7 @@ func (s *Server) handleSignalingClient(w http.ResponseWriter, r *http.Request) {
 	_ = conn.WriteJSON(map[string]any{
 		"type": "device-metadata",
 		"data": map[string]any{
-			"deviceVersion": "jetkvm-desktop-emulator",
+			"deviceVersion": "jethq-emulator",
 		},
 	})
 
@@ -839,7 +839,7 @@ func (s *Server) exchangeOffer(encoded string) (string, error) {
 	videoTrack, err := webrtc.NewTrackLocalStaticSample(
 		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264},
 		"video",
-		"jetkvm-desktop-emulator",
+		"jethq-emulator",
 	)
 	if err != nil {
 		return "", err

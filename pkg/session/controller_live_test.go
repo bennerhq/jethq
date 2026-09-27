@@ -10,14 +10,14 @@ import (
 )
 
 func TestLiveControllerConnectsAndForwardsSafeInput(t *testing.T) {
-	baseURL := os.Getenv("JETKVM_BASE_URL")
+	baseURL := os.Getenv("JETHQ_BASE_URL")
 	if baseURL == "" {
-		t.Skip("JETKVM_BASE_URL not set")
+		t.Skip("JETHQ_BASE_URL not set")
 	}
 
 	controller := New(Config{
 		BaseURL:       baseURL,
-		Password:      os.Getenv("JETKVM_PASSWORD"),
+		Password:      os.Getenv("JETHQ_PASSWORD"),
 		RPCTimeout:    5 * time.Second,
 		Reconnect:     true,
 		ReconnectBase: 200 * time.Millisecond,
@@ -62,7 +62,7 @@ func TestLiveControllerConnectsAndForwardsSafeInput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if os.Getenv("JETKVM_LIVE_ALLOW_SETTING_MUTATIONS") == "1" {
+	if os.Getenv("JETHQ_LIVE_ALLOW_SETTING_MUTATIONS") == "1" {
 		if err := controller.SetQuality(0.5); err != nil {
 			t.Fatal(err)
 		}
@@ -70,18 +70,18 @@ func TestLiveControllerConnectsAndForwardsSafeInput(t *testing.T) {
 }
 
 func TestLiveControllerRebootsWhenAllowed(t *testing.T) {
-	if os.Getenv("JETKVM_LIVE_ALLOW_DISRUPTIVE") != "1" {
-		t.Skip("JETKVM_LIVE_ALLOW_DISRUPTIVE not set")
+	if os.Getenv("JETHQ_LIVE_ALLOW_DISRUPTIVE") != "1" {
+		t.Skip("JETHQ_LIVE_ALLOW_DISRUPTIVE not set")
 	}
 
-	baseURL := os.Getenv("JETKVM_BASE_URL")
+	baseURL := os.Getenv("JETHQ_BASE_URL")
 	if baseURL == "" {
-		t.Skip("JETKVM_BASE_URL not set")
+		t.Skip("JETHQ_BASE_URL not set")
 	}
 
 	controller := New(Config{
 		BaseURL:       baseURL,
-		Password:      os.Getenv("JETKVM_PASSWORD"),
+		Password:      os.Getenv("JETHQ_PASSWORD"),
 		RPCTimeout:    5 * time.Second,
 		Reconnect:     true,
 		ReconnectBase: 500 * time.Millisecond,

@@ -359,7 +359,7 @@ func TestPreferencesPathUsesProjectConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(home, ".config", "jethq", "confg.json")
+	want := filepath.Join(home, ".config", "jethq", "config.json")
 	if path != want {
 		t.Fatalf("preferences path = %q, want %q", path, want)
 	}
@@ -397,6 +397,60 @@ func TestLoadPreferencesCreatesConfigFile(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("startup config file was not created: %v", err)
+	}
+}
+
+func TestLoadPreferencesMigratesLegacyConfigFile(t *testing.T) {
+	originalHomeDir := userHomeDir
+	home := t.TempDir()
+	userHomeDir = func() (string, error) { return home, nil }
+	t.Cleanup(func() { userHomeDir = originalHomeDir })
+
+	dir := filepath.Join(home, ".config", "jethq")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(dir, "confg.json")
+	if err := os.WriteFile(legacy, []byte(`{"hide_cursor": true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	prefs := loadPreferences()
+	if !prefs.HideCursor {
+		t.Fatal("legacy preferences were not loaded")
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy config file still present: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "config.json")); err != nil {
+		t.Fatalf("migrated config file missing: %v", err)
+	}
+}
+
+func TestLoadPreferencesKeepsCurrentConfigOverLegacy(t *testing.T) {
+	originalHomeDir := userHomeDir
+	home := t.TempDir()
+	userHomeDir = func() (string, error) { return home, nil }
+	t.Cleanup(func() { userHomeDir = originalHomeDir })
+
+	dir := filepath.Join(home, ".config", "jethq")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(dir, "confg.json")
+	if err := os.WriteFile(legacy, []byte(`{"hide_cursor": true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"invert_scroll": true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	prefs := loadPreferences()
+	if prefs.HideCursor || !prefs.InvertScroll {
+		t.Fatalf("prefs = %+v, want current config file to win", prefs)
+	}
+	if _, err := os.Stat(legacy); err != nil {
+		t.Fatalf("legacy config file should be left alone: %v", err)
 	}
 }
 

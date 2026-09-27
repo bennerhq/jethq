@@ -29,5 +29,5 @@ cd "$root"
 # Build once, then place that exact executable in the app bundle.  Keeping the
 # command-line binary and Finder-launched application identical avoids subtle
 # behavior differences caused by separate Go builds.
-go build -o "$root/jethq" ./cmd/jetkvm-desktop
+go build -o "$root/jethq" ./cmd/jethq
 cp "$root/jethq" "$bundle/Contents/MacOS/jethq"

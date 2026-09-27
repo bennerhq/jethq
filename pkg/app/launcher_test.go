@@ -39,7 +39,7 @@ func TestRememberedDevicesSurviveRestart(t *testing.T) {
 		t.Fatalf("discovered = %+v, want one confirmed entry", app.discovered)
 	}
 
-	data, err := os.ReadFile(filepath.Join(home, ".config", "jethq", "confg.json"))
+	data, err := os.ReadFile(filepath.Join(home, ".config", "jethq", "config.json"))
 	if err != nil {
 		t.Fatalf("reading preferences: %v", err)
 	}
