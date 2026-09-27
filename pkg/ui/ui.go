@@ -143,6 +143,7 @@ type Theme struct {
 	PanelStroke   color.Color
 	SectionFill   color.Color
 	SectionStroke color.Color
+	SelectionFill color.Color
 	Title         color.Color
 	Body          color.Color
 	Muted         color.Color
@@ -185,6 +186,7 @@ func DarkTheme() Theme {
 		PanelStroke:   color.RGBA{R: 65, G: 72, B: 104, A: 210},
 		SectionFill:   color.RGBA{R: 31, G: 35, B: 51, A: 250},
 		SectionStroke: color.RGBA{R: 65, G: 72, B: 104, A: 190},
+		SelectionFill: color.RGBA{R: 48, G: 55, B: 82, A: 252},    // #303752
 		Title:         color.RGBA{R: 192, G: 202, B: 245, A: 255}, // #c0caf5
 		Body:          color.RGBA{R: 169, G: 177, B: 214, A: 255}, // #a9b1d6
 		Muted:         color.RGBA{R: 86, G: 95, B: 137, A: 255},   // #565f89
@@ -221,6 +223,7 @@ func LightTheme() Theme {
 		PanelStroke:   color.RGBA{R: 100, G: 120, B: 147, A: 205},
 		SectionFill:   color.RGBA{R: 224, G: 234, B: 245, A: 250},
 		SectionStroke: color.RGBA{R: 108, G: 128, B: 156, A: 205},
+		SelectionFill: color.RGBA{R: 198, G: 219, B: 243, A: 252},
 		Title:         color.RGBA{R: 23, G: 31, B: 44, A: 255},
 		Body:          color.RGBA{R: 31, G: 41, B: 55, A: 255},
 		Muted:         color.RGBA{R: 77, G: 93, B: 113, A: 255},

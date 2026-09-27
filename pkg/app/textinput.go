@@ -278,6 +278,11 @@ func (a *App) markCurrentTextBindingDirty() {
 	}
 	if a.launcherOpen {
 		a.launcherError = ""
+		if !a.settingsOpen {
+			// Typing a target takes over from a highlighted device, so Enter
+			// connects to what is actually in the field.
+			a.launcherSelection = ""
+		}
 	}
 }
 

@@ -353,7 +353,9 @@ func TestPreferencesPathUsesProjectConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	home, err := os.UserHomeDir()
+	// Use the same accessor preferencesPath does; tests redirect it to a
+	// throwaway home so they never write to the real profile.
+	home, err := userHomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}

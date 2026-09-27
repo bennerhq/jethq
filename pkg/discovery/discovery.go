@@ -307,26 +307,21 @@ var discoveryHTTPClient = &http.Client{
 	},
 }
 
+// reverseResolver deliberately forces Go's own resolver. macOS routes
+// net.LookupAddr through the system resolver by default, which answers "no such
+// host" for reverse lookups of LAN names, so devices were only ever named after
+// their IP. Querying the configured nameserver directly resolves them.
+var reverseResolver = &net.Resolver{PreferGo: true}
+
+const reverseLookupTimeout = time.Second
+
 func reverseLookup(addr netip.Addr) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), reverseLookupTimeout)
 	defer cancel()
 
-	type result struct {
-		names []string
-	}
-	ch := make(chan result, 1)
-	go func() {
-		names, _ := net.LookupAddr(addr.String())
-		ch <- result{names: names}
-	}()
-
-	select {
-	case <-ctx.Done():
+	names, err := reverseResolver.LookupAddr(ctx, addr.String())
+	if err != nil || len(names) == 0 {
 		return ""
-	case res := <-ch:
-		if len(res.names) == 0 {
-			return ""
-		}
-		return strings.TrimSuffix(res.names[0], ".")
 	}
+	return strings.TrimSuffix(names[0], ".")
 }

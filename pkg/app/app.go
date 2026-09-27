@@ -109,9 +109,10 @@ type App struct {
 	launcherInput          string
 	launcherPassword       string
 	launcherError          string
+	launcherSelection      string
 	pendingTarget          string
 	discovery              *discovery.Scanner
-	discovered             []discovery.Device
+	discovered             []launcherDevice
 	settingsActions        map[settingsActionGroup]settingsActionState
 	sectionLoadSeq         map[settingsSection]uint64
 	mediaView              mediaView
@@ -457,6 +458,8 @@ func New(cfg Config) (*App, error) {
 		launcherOpen:        launcherOpen,
 		launcherMode:        launcherModeBrowse,
 		discovery:           discovery.NewScanner(),
+		discovered:          rememberedDevices(prefs.KnownDevices),
+		launcherSelection:   lastUsedDevice(prefs.KnownDevices),
 		settingsActions:     make(map[settingsActionGroup]settingsActionState),
 		sectionLoadSeq:      make(map[settingsSection]uint64),
 		mediaView:           mediaViewHome,
@@ -4331,6 +4334,7 @@ func (a *App) connectTo(target string) {
 		a.launcherMode = launcherModeBrowse
 		return
 	}
+	a.rememberUsedDevice(baseURL)
 	if a.ctrl != nil {
 		a.ctrl.Stop()
 	}
